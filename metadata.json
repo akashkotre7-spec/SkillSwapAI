@@ -1,0 +1,12 @@
+{
+  "name": "SkillSwap",
+  "description": "Premium AI skill exchange platform. Match with mentors and learners using Gemini AI and swipe through skills.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "Real-time Chat",
+    "AI Matching",
+    "Gesture UI"
+  ]
+}

@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // --- Users ---
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.userId is string &&
+               data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+               data.email is string && data.email.size() <= 256 &&
+               (!('avatar' in data) || (data.avatar is string && data.avatar.size() <= 2048)) &&
+               (!('coverImage' in data) || (data.coverImage is string && data.coverImage.size() <= 2048)) &&
+               (!('bio' in data) || (data.bio is string && data.bio.size() <= 1000)) &&
+               (!('teaches' in data) || (data.teaches is list && data.teaches.size() <= 100)) &&
+               (!('learns' in data) || (data.learns is list && data.learns.size() <= 100)) &&
+               (!('onboarded' in data) || (data.onboarded is bool)) &&
+               (!('points' in data) || (data.points is int || data.points is float)) &&
+               (!('xp' in data) || (data.xp is int || data.xp is float)) &&
+               (!('level' in data) || (data.level is int || data.level is float)) &&
+               (!('role' in data) || (data.role in ['user', 'moderator', 'admin'])) &&
+               (!('gender' in data) || (data.gender is string && data.gender.size() <= 50)) &&
+               (!('preferredGender' in data) || (data.preferredGender is string && data.preferredGender.size() <= 50)) &&
+               (!('settings' in data) || (data.settings is map)) &&
+               (!('likedUsers' in data) || (data.likedUsers is list && data.likedUsers.size() <= 5000)) &&
+               (!('passedUsers' in data) || (data.passedUsers is list && data.passedUsers.size() <= 5000)) &&
+               (!('createdAt' in data) || (data.createdAt is timestamp)) &&
+               (!('updatedAt' in data) || (data.updatedAt is timestamp));
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) && 
+                      incoming().userId == userId &&
+                      incoming().createdAt == request.time &&
+                      isValidUser(incoming());
+                      
+      allow update: if (isOwner(userId) || isAdmin()) &&
+                      incoming().userId == existing().userId &&
+                      incoming().createdAt == existing().createdAt &&
+                      // Relaxing temporal check for simple updates if not using serverTimestamp every time,
+                      // but following instructions to strictly validate if updatedAt is sent.
+                      (!('updatedAt' in incoming()) || (incoming().updatedAt == request.time)) &&
+                      isValidUser(incoming()) && (
+                        isAdmin() ||
+                        // Prevent users from changing their own role or points (if not admin)
+                        (!incoming().diff(existing()).affectedKeys().hasAny(['role', 'points']))
+                      );
+    }
+
+    // --- Matches ---
+    match /matches/{matchId} {
+      function isValidMatch(data) {
+        return data.userIds is list && data.userIds.size() == 2 &&
+               data.userIds[0] is string && data.userIds[1] is string &&
+               (!('lastMessage' in data) || (data.lastMessage is string && data.lastMessage.size() <= 1000));
+      }
+
+      function isParticipant() {
+        return isSignedIn() && (request.auth.uid in existing().userIds);
+      }
+
+      allow read: if isParticipant() || isAdmin();
+      
+      // Matches are typically created by the system/server or via a function, 
+      // but if the client creates it upon mutual like detection:
+      allow create: if isSignedIn() && 
+                      (request.auth.uid in incoming().userIds) &&
+                      incoming().createdAt == request.time &&
+                      isValidMatch(incoming());
+
+      allow update: if (isParticipant() || isAdmin()) &&
+                      incoming().userIds == existing().userIds &&
+                      incoming().createdAt == existing().createdAt &&
+                      isValidMatch(incoming()) && (
+                        isAdmin() ||
+                        // Only allow updating lastMessage related fields
+                        incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt'])
+                      );
+
+      // --- Messages ---
+      match /messages/{messageId} {
+        function isValidMessage(data) {
+          return data.senderId == request.auth.uid &&
+                 data.text is string && data.text.size() > 0 && data.text.size() <= 2000 &&
+                 (!('image' in data) || (data.image is string && data.image.size() <= 2048));
+        }
+
+        allow read: if isParticipant() || isAdmin();
+        allow create: if isParticipant() && 
+                        isValidMessage(incoming()) &&
+                        incoming().createdAt == request.time;
+      }
+    }
+    
+    // --- Admins ---
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+    }
+  }
+}

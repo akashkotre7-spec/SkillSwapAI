@@ -1,0 +1,64 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Public profile and learning preferences for a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The Firebase Auth UID." },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "avatar": { "type": "string" },
+        "bio": { "type": "string" },
+        "teaches": { "type": "array", "items": { "type": "string" } },
+        "learns": { "type": "array", "items": { "type": "string" } },
+        "points": { "type": "number", "description": "Experience points or credits." },
+        "gender": { "type": "string", "enum": ["male", "female", "non-binary", "other"] },
+        "preferredGender": { "type": "string", "enum": ["male", "female", "non-binary", "other", "any"] },
+        "likedUsers": { "type": "array", "items": { "type": "string" }, "description": "UIDs of users this user liked." },
+        "passedUsers": { "type": "array", "items": { "type": "string" }, "description": "UIDs of users this user passed." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "email", "createdAt"]
+    },
+    "Match": {
+      "title": "Match Request",
+      "description": "A confirmed match between two users.",
+      "type": "object",
+      "properties": {
+        "userIds": { "type": "array", "items": { "type": "string" }, "description": "Sorted UIDs of the two users." },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userIds", "createdAt"]
+    },
+    "Message": {
+      "title": "Chat Message",
+      "description": "A message sent between matched users.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "image": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "text", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Primary user profile collection."
+    },
+    "/matches/{matchId}": {
+      "schema": "Match",
+      "description": "Collection of all matches and swipes."
+    },
+    "/matches/{matchId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Subcollection for messages within a match."
+    }
+  }
+}
